@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wisteria: a BST that grows</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg1:#F7F0FF; --bg2:#E0CCFF; --panel:rgba(255,255,255,.66); --ink:#2A1650; --muted:#6E5F8F;
+  --line:rgba(90,50,160,.25); --vine:#8F6BD6; --stars:0;
+  --orb1:#DCC6FF; --orb2:#7C3AED; --orb-stroke:#5B21B6; --glow:rgba(124,58,237,.55);
+  --visit1:#FFE08A; --visit2:#F0A81E; --visit-glow:rgba(240,168,30,.75);
+  --found1:#B6FFE3; --found2:#12A775; --found-glow:rgba(18,167,117,.7);
+  --remove1:#FFB3C8; --remove2:#DC1F58; --remove-glow:rgba(220,31,88,.7);
+  --code-bg:rgba(255,255,255,.8); --code-ink:#2A1650; --kw:#7C3AED; --ty:#0E7C86; --cm:#8A7BA8; --nl:#C2410C;
+  --hl:rgba(240,168,30,.28); --hl-bar:#F0A81E; --btn-ink:#fff;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg1:#100922; --bg2:#2B1656; --panel:rgba(255,255,255,.07); --ink:#F3ECFF; --muted:#B9A8DD;
+    --line:rgba(200,170,255,.22); --vine:#9D7BE0; --stars:1;
+    --orb1:#E4D0FF; --orb2:#7C3AED; --orb-stroke:#C4A3FF; --glow:rgba(169,112,255,.75);
+    --code-bg:rgba(8,4,22,.7); --code-ink:#EADFFF; --kw:#C4A3FF; --ty:#7DE3EC; --cm:#8C7BB3; --nl:#FFB37A;
+    --hl:rgba(255,224,138,.2); --hl-bar:#FFE08A;
+  }
+}
+:root[data-theme="dark"]{
+  --bg1:#100922; --bg2:#2B1656; --panel:rgba(255,255,255,.07); --ink:#F3ECFF; --muted:#B9A8DD;
+  --line:rgba(200,170,255,.22); --vine:#9D7BE0; --stars:1;
+  --orb1:#E4D0FF; --orb2:#7C3AED; --orb-stroke:#C4A3FF; --glow:rgba(169,112,255,.75);
+  --code-bg:rgba(8,4,22,.7); --code-ink:#EADFFF; --kw:#C4A3FF; --ty:#7DE3EC; --cm:#8C7BB3; --nl:#FFB37A;
+  --hl:rgba(255,224,138,.2); --hl-bar:#FFE08A;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; min-height:100vh; color:var(--ink); background-color:var(--bg1);
+  background-image:linear-gradient(180deg,var(--bg1),var(--bg2)); background-attachment:fixed;
+  font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif; font-size:16px; line-height:1.45;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; opacity:var(--stars);
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 18%,#fff,transparent),radial-gradient(1px 1px at 28% 62%,#fff,transparent),
+    radial-gradient(1.5px 1.5px at 44% 12%,#fff,transparent),radial-gradient(1px 1px at 63% 38%,#fff,transparent),
+    radial-gradient(2px 2px at 78% 22%,#fff,transparent),radial-gradient(1px 1px at 88% 70%,#fff,transparent),
+    radial-gradient(1.5px 1.5px at 52% 84%,#fff,transparent),radial-gradient(1px 1px at 8% 88%,#fff,transparent),
+    radial-gradient(1px 1px at 93% 8%,#fff,transparent),radial-gradient(1.5px 1.5px at 35% 40%,#fff,transparent);
+  animation:twinkle 5s ease-in-out infinite alternate;
+}
+@keyframes twinkle{from{filter:brightness(.6)}to{filter:brightness(1.3)}}
+main{position:relative; max-width:960px; margin:0 auto; padding:22px 16px 48px}
+h1{font-size:clamp(2.3rem,9vw,3.8rem); font-weight:800; letter-spacing:-.035em; line-height:.95; margin:6px 0 8px}
+.sub{color:var(--muted); margin:0 0 18px; max-width:50ch}
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:14px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
+.controls{display:flex; flex-direction:column; gap:12px; margin-bottom:14px}
+.row{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.label{font-size:.85rem; color:var(--muted); min-width:54px}
+input[type=number]{
+  width:112px; font:inherit; font-size:1.2rem; font-weight:600; padding:10px 12px; color:var(--ink);
+  border:1px solid var(--line); border-radius:12px; background:var(--panel);
+}
+button{
+  font:inherit; font-weight:600; padding:10px 14px; border-radius:12px; cursor:pointer; min-height:44px;
+  border:1px solid var(--line); background:var(--panel); color:var(--ink);
+}
+button.primary{background:linear-gradient(135deg,#A56BFF,#6B2FE0); color:var(--btn-ink); border-color:transparent; box-shadow:0 4px 18px rgba(124,58,237,.45)}
+button.danger{color:var(--remove2); border-color:var(--remove2)}
+:root[data-theme="dark"] button.danger{color:var(--remove1); border-color:var(--remove1)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.danger{color:var(--remove1); border-color:var(--remove1)}}
+button:disabled{opacity:.45; cursor:not-allowed}
+button:active:not(:disabled){transform:translateY(1px)}
+:focus-visible{outline:3px solid var(--visit2); outline-offset:2px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:8px; margin-bottom:14px}
+.stat{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:8px 12px}
+.stat b{display:block; font-size:1.5rem; font-variant-numeric:tabular-nums; line-height:1.1}
+.stat span{font-size:.8rem; color:var(--muted)}
+.stage{position:relative}
+.canvas{overflow-x:auto; padding:6px 0; min-height:230px}
+#petals{position:absolute; inset:0; overflow:hidden; pointer-events:none; border-radius:14px}
+#petals span{
+  position:absolute; top:-14px; width:10px; height:14px; border-radius:80% 0 80% 0; opacity:.95;
+  background:linear-gradient(135deg,#F0E1FF,#B889FF); animation:fall var(--d,3s) ease-in forwards;
+}
+@keyframes fall{to{transform:translate(var(--dx,0),280px) rotate(420deg); opacity:0}}
+svg{display:block; margin:0 auto; overflow:visible}
+.edge{stroke:var(--vine); stroke-width:3; fill:none; stroke-linecap:round; opacity:.85}
+.edge.grow{stroke-dasharray:100; animation:draw .7s ease-out}
+@keyframes draw{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
+.node{--g:var(--glow)}
+.node circle{fill:url(#gOrb); stroke:var(--orb-stroke); stroke-width:1.5; filter:drop-shadow(0 0 7px var(--g)); transition:fill .2s}
+.node text{fill:#fff; font-weight:800; font-size:15px; text-anchor:middle; dominant-baseline:central; font-variant-numeric:tabular-nums; paint-order:stroke; stroke:rgba(40,10,90,.55); stroke-width:2.5px}
+.node.visit{--g:var(--visit-glow)} .node.visit circle{fill:url(#gVisit)} .node.visit text{fill:#3A2200; stroke:none}
+.node.found{--g:var(--found-glow)} .node.found circle{fill:url(#gFound)} .node.found text{fill:#053B29; stroke:none}
+.node.remove{--g:var(--remove-glow)} .node.remove circle{fill:url(#gRemove)}
+.node.pop circle{animation:pop .5s ease-out; transform-box:fill-box; transform-origin:center}
+@keyframes pop{0%{transform:scale(.2)}65%{transform:scale(1.25)}100%{transform:scale(1)}}
+.empty{color:var(--muted); text-align:center; padding:80px 12px}
+.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:.85rem; color:var(--muted); margin-top:8px}
+.legend i{display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:5px; vertical-align:-1px}
+.status{min-height:1.5em; margin:12px 2px 0; font-weight:600}
+.status.bad{color:var(--remove2)} .status.good{color:var(--found2)}
+:root[data-theme="dark"] .status.bad{color:var(--remove1)} :root[data-theme="dark"] .status.good{color:var(--found1)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .status.bad{color:var(--remove1)} :root:not([data-theme="light"]) .status.good{color:var(--found1)}}
+.trav{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; min-height:34px}
+.chip{background:linear-gradient(135deg,#A56BFF,#6B2FE0); color:#fff; border-radius:999px; padding:3px 12px; font-weight:700; font-variant-numeric:tabular-nums}
+.tools{display:flex; justify-content:space-between; align-items:center; margin-top:16px; gap:10px; flex-wrap:wrap}
+.speed{display:flex; align-items:center; gap:8px}
+input[type=range]{accent-color:#8B4DFF}
+@media (prefers-reduced-motion:reduce){ body::before{animation:none} .node.pop circle,.edge.grow{animation:none} #petals{display:none} }
+</style>
+</head>
+<body>
+<main>
+  <h1>Wisteria</h1>
+  <p class="sub">A binary search tree that grows as you type. Smaller values hang to the left, larger to the right.</p>
+
+  <section class="panel controls" aria-label="Operations">
+    <div class="row">
+      <input id="val" type="number" inputmode="numeric" min="0" max="999" placeholder="0–999" aria-label="Value">
+      <button class="primary" id="btnInsert">Insert</button>
+      <button id="btnSearch">Search</button>
+      <button class="danger" id="btnDelete">Delete</button>
+    </div>
+    <div class="row">
+      <span class="label">Traverse</span>
+      <button data-trav="in">In-order</button>
+      <button data-trav="pre">Pre-order</button>
+      <button data-trav="post">Post-order</button>
+      <button data-trav="level">Level-order</button>
+    </div>
+    <div class="row">
+      <span class="label">Tree</span>
+      <button id="btnMin">Find min</button>
+      <button id="btnMax">Find max</button>
+      <button id="btnBalance">Balance</button>
+      <button id="btnRandom">Add 7 random</button>
+      <button id="btnClear">Clear</button>
+    </div>
+  </section>
+
+  <div class="stats" aria-label="Tree statistics">
+    <div class="stat"><b id="sSize">0</b><span>Nodes</span></div>
+    <div class="stat"><b id="sHeight">0</b><span>Height</span></div>
+    <div class="stat"><b id="sIdeal">0</b><span>Best possible</span></div>
+    <div class="stat"><b id="sMin">–</b><span>Smallest</span></div>
+    <div class="stat"><b id="sMax">–</b><span>Largest</span></div>
+  </div>
+
+  <section class="panel" aria-label="Tree view">
+    <div class="stage">
+      <div class="canvas" id="canvas"></div>
+      <div id="petals" aria-hidden="true"></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:linear-gradient(135deg,#FFE08A,#F0A81E)"></i>Visiting</span>
+      <span><i style="background:linear-gradient(135deg,#B6FFE3,#12A775)"></i>Found</span>
+      <span><i style="background:linear-gradient(135deg,#FFB3C8,#DC1F58)"></i>Removing</span>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <div class="trav" id="trav" aria-label="Traversal result"></div>
+  </section>
+
+  <div class="tools">
+    <div class="speed">
+      <label class="label" for="speed">Speed</label>
+      <input type="range" id="speed" min="1" max="5" value="3">
+    </div>
+    <button id="btnTheme" aria-label="Switch between light and dark theme">Theme</button>
+  </div>
+</main>
+
+<script>
+/* ---------- BST ADT ---------- */
+class Node { constructor(v){ this.v=v; this.l=null; this.r=null; } }
+class BST {
+  constructor(){ this.root=null; this.size=0; }
+  isEmpty(){ return this.root===null; }
+  route(v){
+    const path=[]; let n=this.root;
+    while(n){ path.push(n); if(v===n.v) return {path,found:n}; n = v<n.v ? n.l : n.r; }
+    return {path,found:null};
+  }
+  insert(v){
+    const {path,found}=this.route(v);
+    if(found) return {ok:false,path};
+    const nn=new Node(v);
+    if(!this.root) this.root=nn;
+    else { const p=path[path.length-1]; if(v<p.v) p.l=nn; else p.r=nn; }
+    this.size++;
+    return {ok:true,path};
+  }
+  min(n=this.root){ const path=[]; while(n){ path.push(n); if(!n.l) break; n=n.l; } return path; }
+  max(n=this.root){ const path=[]; while(n){ path.push(n); if(!n.r) break; n=n.r; } return path; }
+  remove(v){
+    const {path,found}=this.route(v);
+    if(!found) return {ok:false,path};
+    let succPath=null;
+    const del=(n,val)=>{
+      if(!n) return null;
+      if(val<n.v){ n.l=del(n.l,val); return n; }
+      if(val>n.v){ n.r=del(n.r,val); return n; }
+      if(!n.l) return n.r;
+      if(!n.r) return n.l;
+      succPath=this.min(n.r);
+      const s=succPath[succPath.length-1];
+      n.v=s.v; n.r=del(n.r,s.v);
+      return n;
+    };
+    this.root=del(this.root,v); this.size--;
+    return {ok:true,path,succPath};
+  }
+  height(n=this.root){ return n ? 1+Math.max(this.height(n.l),this.height(n.r)) : 0; }
+  traverse(kind){
+    const out=[];
+    const go=n=>{
+      if(!n) return;
+      if(kind==='pre') out.push(n);
+      go(n.l);
+      if(kind==='in') out.push(n);
+      go(n.r);
+      if(kind==='post') out.push(n);
+    };
+    if(kind==='level'){
+      const q=this.root?[this.root]:[];
+      while(q.length){ const n=q.shift(); out.push(n); if(n.l)q.push(n.l); if(n.r)q.push(n.r); }
+    } else go(this.root);
+    return out;
+  }
+  rebuild(vals){
+    const b=(lo,hi)=>{ if(lo>hi) return null; const m=(lo+hi)>>1; const n=new Node(vals[m]); n.l=b(lo,m-1); n.r=b(m+1,hi); return n; };
+    this.root=b(0,vals.length-1); this.size=vals.length;
+  }
+  clear(){ this.root=null; this.size=0; }
+}
+
+const $=id=>document.getElementById(id);
+const canvas=$('canvas'), statusEl=$('status'), travEl=$('trav'), input=$('val');
+let busy=false, fresh=null;
+const hl=new Map();
+const tree=new BST();
+
+/* ---------- drawing ---------- */
+const NS='http://www.w3.org/2000/svg';
+const GAP=48, LEVEL=68, PAD=32;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const delay=()=>[900,650,420,240,110][+$('speed').value-1];
+function say(msg,kind=''){ statusEl.textContent=msg; statusEl.className='status '+kind; }
+function setBusy(b){ busy=b; document.querySelectorAll('button').forEach(x=>{ if(x.id!=='btnTheme') x.disabled=b; }); }
+function el(tag,attrs,parent){
+  const e=document.createElementNS(NS,tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]);
+  if(parent) parent.appendChild(e);
+  return e;
+}
+function grad(defs,id,c1,c2){
+  const g=el('radialGradient',{id,cx:'35%',cy:'30%',r:'75%'},defs);
+  el('stop',{offset:'0',style:`stop-color:var(${c1})`},g);
+  el('stop',{offset:'1',style:`stop-color:var(${c2})`},g);
+}
+function petals(n=16){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const box=$('petals');
+  for(let i=0;i<n;i++){
+    const s=document.createElement('span');
+    s.style.left=(Math.random()*100)+'%';
+    s.style.setProperty('--dx',(Math.random()*90-45)+'px');
+    s.style.setProperty('--d',(2.2+Math.random()*2)+'s');
+    s.style.animationDelay=(Math.random()*.6)+'s';
+    box.appendChild(s); setTimeout(()=>s.remove(),5200);
+  }
+}
+
+function render(){
+  canvas.innerHTML='';
+  const n=tree.size;
+  $('sSize').textContent=n;
+  $('sHeight').textContent=tree.height();
+  $('sIdeal').textContent=n?Math.ceil(Math.log2(n+1)):0;
+  const mn=tree.min(), mx=tree.max();
+  $('sMin').textContent=mn.length?mn[mn.length-1].v:'–';
+  $('sMax').textContent=mx.length?mx[mx.length-1].v:'–';
+  if(tree.isEmpty()){
+    canvas.innerHTML='<div class="empty">The branch is bare. Type a number and choose Insert to plant the root.</div>';
+    return;
+  }
+  const pos=new Map(); let idx=0, maxD=0;
+  (function lay(nd,d){ if(!nd) return; lay(nd.l,d+1); pos.set(nd,{x:PAD+idx*GAP,y:PAD+d*LEVEL}); idx++; if(d>maxD)maxD=d; lay(nd.r,d+1); })(tree.root,0);
+  const inner=PAD*2+(idx-1)*GAP, w=Math.max(inner,300), h=PAD*2+maxD*LEVEL;
+  const svg=el('svg',{width:w,height:h,viewBox:`0 0 ${w} ${h}`,role:'img','aria-label':`Binary search tree with ${n} nodes`});
+  const defs=el('defs',{},svg);
+  grad(defs,'gOrb','--orb1','--orb2'); grad(defs,'gVisit','--visit1','--visit2');
+  grad(defs,'gFound','--found1','--found2'); grad(defs,'gRemove','--remove1','--remove2');
+  const g=el('g',{transform:`translate(${(w-inner)/2},0)`},svg);
+  for(const [nd,p] of pos){
+    for(const c of [nd.l,nd.r]){
+      if(!c) continue;
+      const q=pos.get(c), my=(p.y+q.y)/2;
+      el('path',{class:'edge'+(c.v===fresh?' grow':''),pathLength:100,d:`M${p.x},${p.y} C${p.x},${my} ${q.x},${my} ${q.x},${q.y}`},g);
+    }
+  }
+  for(const [nd,p] of pos){
+    const cls=['node'];
+    if(hl.has(nd.v)) cls.push(hl.get(nd.v));
+    if(fresh===nd.v) cls.push('pop');
+    const ng=el('g',{class:cls.join(' '),transform:`translate(${p.x},${p.y})`},g);
+    el('circle',{r:22},ng);
+    el('text',{},ng).textContent=nd.v;
+  }
+  canvas.appendChild(svg);
+}
+
+async function walk(nodes,cls='visit'){
+  for(let i=0;i<nodes.length;i++){
+    hl.set(nodes[i].v,cls); render();
+    await sleep(delay());
+  }
+}
+function clearHl(){ hl.clear(); fresh=null; render(); }
+function readVal(){
+  const raw=input.value.trim(), v=Number(raw);
+  if(raw===''||!Number.isInteger(v)||v<0||v>999){ say('Enter a whole number from 0 to 999.','bad'); input.focus(); return null; }
+  return v;
+}
+async function run(fn){
+  if(busy) return;
+  setBusy(true); travEl.innerHTML='';
+  try{ await fn(); } finally { setBusy(false); }
+}
+
+/* ---------- operations ---------- */
+$('btnInsert').onclick=()=>{
+  const v=readVal(); if(v===null) return;
+  run(async()=>{
+    clearHl();
+    say(`Inserting ${v}: go left if smaller, right if larger, until there is an empty spot.`);
+    const r=tree.insert(v);
+    await walk(r.path);
+    if(!r.ok){
+      hl.set(v,'found'); render(); await sleep(delay()*1.5);
+      say(`${v} is already in the tree. A BST keeps each value once.`,'bad');
+    } else {
+      hl.clear(); fresh=v; render(); petals();
+      say(`Inserted ${v} after ${r.path.length} comparison${r.path.length===1?'':'s'}.`,'good');
+      await sleep(delay()*1.5);
+    }
+    clearHl(); input.value=''; input.focus();
+  });
+};
+
+$('btnSearch').onclick=()=>{
+  const v=readVal(); if(v===null) return;
+  run(async()=>{
+    clearHl();
+    if(tree.isEmpty()){ say('The tree is empty, so there is nothing to search.','bad'); return; }
+    say(`Searching for ${v}…`);
+    const r=tree.route(v);
+    await walk(r.found?r.path.slice(0,-1):r.path);
+    if(r.found){
+      hl.set(v,'found'); render();
+      say(`Found ${v} after ${r.path.length} comparison${r.path.length===1?'':'s'}.`,'good');
+    } else {
+      say(`${v} is not in the tree. Checked ${r.path.length} node${r.path.length===1?'':'s'}.`,'bad');
+    }
+    await sleep(delay()*2); clearHl();
+  });
+};
+
+$('btnDelete').onclick=()=>{
+  const v=readVal(); if(v===null) return;
+  run(async()=>{
+    clearHl();
+    if(tree.isEmpty()){ say('The tree is empty, so there is nothing to delete.','bad'); return; }
+    const {path}=tree.route(v);
+    const exists=path.length && path[path.length-1].v===v;
+    say(`Looking for ${v} to delete…`);
+    await walk(exists?path.slice(0,-1):path);
+    if(!exists){ say(`${v} is not in the tree. Nothing was deleted.`,'bad'); await sleep(delay()*1.5); clearHl(); return; }
+    const t=path[path.length-1];
+    hl.set(v,'remove'); render(); await sleep(delay());
+    if(!t.l){ say(`${v} has no left child, so its right side moves up.`); }
+    else if(!t.r){ say(`${v} has no right child, so its left side moves up.`); }
+    else {
+      say(`${v} has two children. The smallest value on its right (the successor) takes its place.`);
+      await walk(tree.min(t.r));
+    }
+    await sleep(delay());
+    const r=tree.remove(v);
+    hl.clear(); render();
+    say(r.succPath?`Deleted ${v}; successor ${r.succPath[r.succPath.length-1].v} took its place.`:`Deleted ${v}.`,'good');
+    await sleep(delay()); clearHl(); input.value='';
+  });
+};
+
+document.querySelectorAll('[data-trav]').forEach(b=>{
+  b.onclick=()=>run(async()=>{
+    const kind=b.dataset.trav;
+    clearHl();
+    if(tree.isEmpty()){ say('The tree is empty, so there is nothing to traverse.','bad'); return; }
+    const names={in:'In-order: left, node, right. The values come out sorted.',pre:'Pre-order: node, left, right.',post:'Post-order: left, right, node.',level:'Level-order: one row at a time, top to bottom.'};
+    say(names[kind]);
+    for(const n of tree.traverse(kind)){
+      hl.clear(); hl.set(n.v,'visit'); render();
+      const c=document.createElement('span'); c.className='chip'; c.textContent=n.v; travEl.appendChild(c);
+      await sleep(delay());
+    }
+    clearHl();
+  });
+});
+
+function extreme(kind){
+  return ()=>run(async()=>{
+    clearHl();
+    if(tree.isEmpty()){ say('The tree is empty.','bad'); return; }
+    const p=kind==='min'?tree.min():tree.max();
+    say(kind==='min'?'Smallest value: keep going left.':'Largest value: keep going right.');
+    await walk(p.slice(0,-1));
+    const last=p[p.length-1]; hl.set(last.v,'found'); render();
+    say(`${kind==='min'?'Smallest':'Largest'} value is ${last.v}.`,'good');
+    await sleep(delay()*2); clearHl();
+  });
+}
+$('btnMin').onclick=extreme('min');
+$('btnMax').onclick=extreme('max');
+
+$('btnBalance').onclick=()=>run(async()=>{
+  clearHl();
+  if(tree.size<3){ say('Add a few more values, then balance the tree.','bad'); return; }
+  const before=tree.height();
+  const vals=tree.traverse('in').map(n=>n.v);
+  say('Taking the sorted values and making the middle one the root, then repeating on each half.');
+  await sleep(delay()*2);
+  tree.rebuild(vals); render(); petals(22);
+  say(before===tree.height()?`Already as short as it can be: height ${before}.`:`Balanced: height went from ${before} to ${tree.height()}.`,'good');
+  await sleep(delay()*2); clearHl();
+});
+
+$('btnRandom').onclick=()=>run(async()=>{
+  clearHl(); let added=0, guard=0;
+  while(added<7 && guard++<300){
+    const v=Math.floor(Math.random()*100);
+    if(tree.insert(v).ok){ added++; fresh=v; render(); await sleep(Math.min(delay(),320)); }
+  }
+  fresh=null; render(); petals(); say(`Added ${added} random values.`,'good');
+});
+
+$('btnClear').onclick=()=>run(async()=>{ tree.clear(); clearHl(); say('Tree cleared. Insert a value to start again.'); });
+input.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!busy) $('btnInsert').click(); });
+
+$('btnTheme').onclick=()=>{
+  const cur=document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  const next=cur==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',next);
+  try{ localStorage.setItem('bst-theme',next); }catch(e){}
+};
+try{ const t=localStorage.getItem('bst-theme'); if(t) document.documentElement.setAttribute('data-theme',t); }catch(e){}
+
+[50,30,70,20,40,60,80].forEach(v=>tree.insert(v));
+render();
+say('Example tree loaded. Try inserting 35, then Balance.');
+</script>
+</body>
+</html>
